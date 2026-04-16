@@ -70,18 +70,18 @@ public:
 
     void setEnabled(bool enabled);
 
-    QString getKey(const QString& id);
-    QString storeKey(const QString& key);
+    QString getKey(const QString& id, const QString& hash = {});
+    QString storeKey(const QString& key, const QString& hash = {});
     QString getDatabaseHash(bool legacy = false);
 
     bool isDatabaseOpened() const;
     bool openDatabase(bool triggerUnlock);
-    void lockDatabase();
+    void lockDatabase(const QString& hash = {});
 
-    QJsonObject getDatabaseGroups();
+    QJsonObject getDatabaseGroups(const QString& hash = {});
     QJsonArray getDatabaseEntries();
-    QJsonObject createNewGroup(const QString& groupName, bool isPasskeysGroup = false);
-    QString getCurrentTotp(const QString& uuid);
+    QJsonObject createNewGroup(const QString& groupName, bool isPasskeysGroup = false, const QString& hash = {});
+    QString getCurrentTotp(const QString& uuid, const QString& hash = {});
     void showPasswordGenerator(const KeyPairMessage& keyPairMessage);
     bool isPasswordGeneratorRequested() const;
     QSharedPointer<Database> getDatabase(const QUuid& rootGroupUuid = {});
@@ -203,6 +203,8 @@ private:
                    const bool omitWwwSubdomain = false,
                    const bool allowWildcards = false);
     bool handleURLWithWildcards(const QUrl& entryQUrl, const QString& siteUrl);
+    QSharedPointer<Database> resolveDatabaseByHash(const QString& hash);
+    static QString computeDatabaseHash(const QSharedPointer<Database>& db);
     QString getDatabaseRootUuid();
     QString getDatabaseRecycleBinUuid();
     void hideWindow() const;

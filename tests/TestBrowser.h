@@ -53,6 +53,13 @@ private slots:
     void testRestrictBrowserKey();
     void testHideEntry();
 
+    // Multi-database tests
+    void testComputeDatabaseHash();
+    void testComputeDatabaseHashUniqueness();
+    void testAssociatedHashesAccumulate();
+    void testAssociatedHashesClearOnNewKeys();
+    void testSearchInAllDatabasesDefaultEnabled();
+
 private:
     QList<Entry*> createEntries(QStringList& urls, Group* root, bool additionalUrl = false) const;
     void compareEntriesByPath(QSharedPointer<Database> db, QList<Entry*> entries, QString path);

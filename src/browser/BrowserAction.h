@@ -102,7 +102,7 @@ private:
     QString m_clientPublicKey;
     QString m_publicKey;
     QString m_secretKey;
-    bool m_associated = false;
+    QSet<QString> m_associatedHashes;
 
     friend class TestBrowser;
 };

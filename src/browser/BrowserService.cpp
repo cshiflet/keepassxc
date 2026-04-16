@@ -116,8 +116,10 @@ void BrowserService::setEnabled(bool enabled)
 
 bool BrowserService::isDatabaseOpened() const
 {
-    if (m_currentDatabaseWidget) {
-        return !m_currentDatabaseWidget->isLocked();
+    for (auto dbWidget : getMainWindow()->getOpenDatabases()) {
+        if (!dbWidget->isLocked()) {
+            return true;
+        }
     }
     return false;
 }
@@ -141,8 +143,20 @@ bool BrowserService::openDatabase(bool triggerUnlock)
     return false;
 }
 
-void BrowserService::lockDatabase()
+void BrowserService::lockDatabase(const QString& hash)
 {
+    if (!hash.isEmpty()) {
+        auto db = resolveDatabaseByHash(hash);
+        if (db) {
+            for (auto dbWidget : getMainWindow()->getOpenDatabases()) {
+                if (dbWidget->database() == db) {
+                    dbWidget->lock();
+                    return;
+                }
+            }
+        }
+    }
+
     if (m_currentDatabaseWidget) {
         m_currentDatabaseWidget->lock();
     }
@@ -210,9 +224,9 @@ QJsonArray BrowserService::getChildrenFromGroup(Group* group)
     return groupList;
 }
 
-QJsonObject BrowserService::getDatabaseGroups()
+QJsonObject BrowserService::getDatabaseGroups(const QString& hash)
 {
-    auto db = getDatabase();
+    auto db = hash.isEmpty() ? getDatabase() : resolveDatabaseByHash(hash);
     if (!db) {
         return {};
     }
@@ -265,13 +279,13 @@ QJsonArray BrowserService::getDatabaseEntries()
     return entries;
 }
 
-QJsonObject BrowserService::createNewGroup(const QString& groupName, bool isPasskeysGroup)
+QJsonObject BrowserService::createNewGroup(const QString& groupName, bool isPasskeysGroup, const QString& hash)
 {
     if (groupName.isEmpty()) {
         return {};
     }
 
-    auto db = getDatabase();
+    auto db = hash.isEmpty() ? getDatabase() : resolveDatabaseByHash(hash);
     if (!db) {
         return {};
     }
@@ -345,10 +359,15 @@ QJsonObject BrowserService::createNewGroup(const QString& groupName, bool isPass
     return result;
 }
 
-QString BrowserService::getCurrentTotp(const QString& uuid)
+QString BrowserService::getCurrentTotp(const QString& uuid, const QString& hash)
 {
     QList<QSharedPointer<Database>> databases;
-    if (browserSettings()->searchInAllDatabases()) {
+    if (!hash.isEmpty()) {
+        auto db = resolveDatabaseByHash(hash);
+        if (db) {
+            databases << db;
+        }
+    } else if (browserSettings()->searchInAllDatabases()) {
         for (auto dbWidget : getMainWindow()->getOpenDatabases()) {
             auto db = dbWidget->database();
             if (db) {
@@ -571,9 +590,9 @@ bool BrowserService::isPasswordGeneratorRequested() const
     return m_passwordGenerator && m_passwordGenerator->isVisible();
 }
 
-QString BrowserService::storeKey(const QString& key)
+QString BrowserService::storeKey(const QString& key, const QString& hash)
 {
-    auto db = getDatabase();
+    auto db = hash.isEmpty() ? getDatabase() : resolveDatabaseByHash(hash);
     if (!db) {
         return {};
     }
@@ -624,9 +643,9 @@ QString BrowserService::storeKey(const QString& key)
     return id;
 }
 
-QString BrowserService::getKey(const QString& id)
+QString BrowserService::getKey(const QString& id, const QString& hash)
 {
-    auto db = getDatabase();
+    auto db = hash.isEmpty() ? getDatabase() : resolveDatabaseByHash(hash);
     if (!db) {
         return {};
     }
@@ -1604,6 +1623,33 @@ bool BrowserService::handleURLWithWildcards(const QUrl& entryQUrl, const QString
     return true;
 }
 
+QString BrowserService::computeDatabaseHash(const QSharedPointer<Database>& db)
+{
+    if (!db || !db->rootGroup()) {
+        return {};
+    }
+    return QCryptographicHash::hash(db->rootGroup()->uuidToHex().toUtf8(), QCryptographicHash::Sha256).toHex();
+}
+
+QSharedPointer<Database> BrowserService::resolveDatabaseByHash(const QString& hash)
+{
+    if (hash.isEmpty()) {
+        return getDatabase();
+    }
+
+    for (auto dbWidget : getMainWindow()->getOpenDatabases()) {
+        if (dbWidget->isLocked()) {
+            continue;
+        }
+        auto db = dbWidget->database();
+        if (db && computeDatabaseHash(db) == hash) {
+            return db;
+        }
+    }
+
+    return {};
+}
+
 QSharedPointer<Database> BrowserService::getDatabase(const QUuid& rootGroupUuid)
 {
     if (!rootGroupUuid.isNull()) {
@@ -1729,6 +1775,12 @@ void BrowserService::databaseLocked(DatabaseWidget* dbWidget)
     if (dbWidget) {
         QJsonObject msg;
         msg["action"] = QString("database-locked");
+
+        auto db = dbWidget->database();
+        if (db) {
+            msg["hash"] = computeDatabaseHash(db);
+        }
+
         m_browserHost->broadcastClientMessage(msg);
     }
 }
@@ -1743,6 +1795,12 @@ void BrowserService::databaseUnlocked(DatabaseWidget* dbWidget)
 
         QJsonObject msg;
         msg["action"] = QString("database-unlocked");
+
+        auto db = dbWidget->database();
+        if (db) {
+            msg["hash"] = computeDatabaseHash(db);
+        }
+
         m_browserHost->broadcastClientMessage(msg);
     }
 }

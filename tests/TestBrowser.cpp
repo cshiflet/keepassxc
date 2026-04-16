@@ -19,6 +19,7 @@
 
 #include "browser/BrowserMessageBuilder.h"
 #include "browser/BrowserSettings.h"
+#include "core/Config.h"
 #include "core/Group.h"
 #include "core/Tools.h"
 #include "crypto/Crypto.h"
@@ -906,4 +907,92 @@ void TestBrowser::testHideEntry()
     root->setCustomDataTriState(BrowserService::OPTION_HIDE_ENTRY, Group::Disable);
     result = m_browserService->searchEntries(db, "https://github.com", "https://github.com/session");
     QCOMPARE(result.length(), 1);
+}
+
+/**
+ * Multi-database tests
+ */
+
+void TestBrowser::testComputeDatabaseHash()
+{
+    auto db = QSharedPointer<Database>::create();
+    auto hash = BrowserService::computeDatabaseHash(db);
+
+    // Hash should be a non-empty hex-encoded SHA-256 (64 hex chars)
+    QVERIFY(!hash.isEmpty());
+    QCOMPARE(hash.length(), 64);
+
+    // Same DB should always produce the same hash
+    QCOMPARE(BrowserService::computeDatabaseHash(db), hash);
+
+    // Null DB should return empty
+    QSharedPointer<Database> nullDb;
+    QVERIFY(BrowserService::computeDatabaseHash(nullDb).isEmpty());
+}
+
+void TestBrowser::testComputeDatabaseHashUniqueness()
+{
+    auto db1 = QSharedPointer<Database>::create();
+    auto db2 = QSharedPointer<Database>::create();
+
+    auto hash1 = BrowserService::computeDatabaseHash(db1);
+    auto hash2 = BrowserService::computeDatabaseHash(db2);
+
+    // Two databases with different root group UUIDs must produce different hashes
+    QVERIFY(db1->rootGroup()->uuid() != db2->rootGroup()->uuid());
+    QVERIFY(hash1 != hash2);
+}
+
+void TestBrowser::testAssociatedHashesAccumulate()
+{
+    // Perform key exchange to set up encryption
+    QJsonObject json;
+    json["action"] = "change-public-keys";
+    json["publicKey"] = PUBLICKEY;
+    json["nonce"] = NONCE;
+
+    auto response = m_browserAction->processClientMessage(nullptr, json);
+    QCOMPARE(response["success"].toString(), TRUE_STR);
+    QVERIFY(m_browserAction->m_associatedHashes.isEmpty());
+
+    // Simulate two associate calls with different hashes by directly inserting
+    // (full associate flow requires a running DB with storeKey dialog)
+    m_browserAction->m_associatedHashes.insert("hash_db_A");
+    QCOMPARE(m_browserAction->m_associatedHashes.size(), 1);
+    QVERIFY(m_browserAction->m_associatedHashes.contains("hash_db_A"));
+
+    m_browserAction->m_associatedHashes.insert("hash_db_B");
+    QCOMPARE(m_browserAction->m_associatedHashes.size(), 2);
+    QVERIFY(m_browserAction->m_associatedHashes.contains("hash_db_A"));
+    QVERIFY(m_browserAction->m_associatedHashes.contains("hash_db_B"));
+
+    // Inserting the same hash again should not increase the count
+    m_browserAction->m_associatedHashes.insert("hash_db_A");
+    QCOMPARE(m_browserAction->m_associatedHashes.size(), 2);
+}
+
+void TestBrowser::testAssociatedHashesClearOnNewKeys()
+{
+    // Pre-populate some associated hashes
+    m_browserAction->m_associatedHashes.insert("hash_db_A");
+    m_browserAction->m_associatedHashes.insert("hash_db_B");
+    QCOMPARE(m_browserAction->m_associatedHashes.size(), 2);
+
+    // New key exchange should clear all associated hashes
+    QJsonObject json;
+    json["action"] = "change-public-keys";
+    json["publicKey"] = PUBLICKEY;
+    json["nonce"] = NONCE;
+
+    auto response = m_browserAction->processClientMessage(nullptr, json);
+    QCOMPARE(response["success"].toString(), TRUE_STR);
+    QVERIFY(m_browserAction->m_associatedHashes.isEmpty());
+}
+
+void TestBrowser::testSearchInAllDatabasesDefaultEnabled()
+{
+    // Verify the default value for Browser_SearchInAllDatabases is true.
+    // This was changed from false to true as part of multi-DB support.
+    auto defaultValue = config()->getDefault(Config::Browser_SearchInAllDatabases);
+    QCOMPARE(defaultValue.toBool(), true);
 }
