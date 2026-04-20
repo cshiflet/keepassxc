@@ -26,11 +26,12 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 66c0373dc7fca549e5803087b9487edfe3aca0a1
-          vcpkgJsonGlob: vcpkg.json
+      - name: Sync runner vcpkg to pinned baseline
+        shell: pwsh
+        run: |
+          git -C "$env:VCPKG_INSTALLATION_ROOT" fetch --depth 1 origin 66c0373dc7fca549e5803087b9487edfe3aca0a1
+          git -C "$env:VCPKG_INSTALLATION_ROOT" checkout 66c0373dc7fca549e5803087b9487edfe3aca0a1
+          & "$env:VCPKG_INSTALLATION_ROOT/bootstrap-vcpkg.bat" -disableMetrics
 
       - name: Configure
         shell: pwsh
@@ -38,7 +39,7 @@ jobs:
           cmake -B build -S . `
             -G "Visual Studio 17 2022" -A x64 `
             -DCMAKE_BUILD_TYPE=RelWithDebInfo `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
             -DWITH_XC_ALL=OFF `
             -DWITH_XC_AUTOTYPE=ON `
