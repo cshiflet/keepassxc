@@ -1,0 +1,88 @@
+name: macOS build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - browser-multi-db
+
+jobs:
+  build:
+    name: Build KeePassXC for macOS
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            triplet: arm64-osx-dynamic
+          - arch: x64
+            triplet: x64-osx-dynamic
+
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install build tools
+        run: |
+          brew install autoconf automake libtool pkg-config cmake ninja asciidoctor
+
+      - name: Bootstrap vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "$HOME/vcpkg"
+          git -C "$HOME/vcpkg" checkout 66c0373dc7fca549e5803087b9487edfe3aca0a1
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: |
+          cmake -B build -S . -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/install \
+            -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+            -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} \
+            -DVCPKG_OVERLAY_TRIPLETS=${{ github.workspace }}/vcpkg/triplets \
+            -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch == 'arm64' && 'arm64' || 'x86_64' }} \
+            -DWITH_XC_AUTOTYPE=ON \
+            -DWITH_XC_BROWSER=ON \
+            -DWITH_XC_BROWSER_PASSKEYS=ON \
+            -DWITH_XC_NETWORKING=ON \
+            -DWITH_XC_UPDATECHECK=OFF \
+            -DWITH_XC_DOCS=OFF \
+            -DWITH_TESTS=ON \
+            -DWITH_APP_BUNDLE=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run TestBrowser
+        if: matrix.arch == 'arm64'
+        continue-on-error: true
+        run: ctest --test-dir build -R "TestBrowser|TestPasskeys" --output-on-failure
+
+      - name: Install
+        run: cmake --install build
+
+      - name: Package
+        run: |
+          sha=$(echo "${{ github.sha }}" | cut -c1-7)
+          cd install
+          tar -czf "../keepassxc-macos-${{ matrix.arch }}-browser-multi-db-$sha.tar.gz" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: keepassxc-macos-${{ matrix.arch }}-browser-multi-db
+          path: keepassxc-macos-${{ matrix.arch }}-browser-multi-db-*.tar.gz
+          retention-days: 14
+          if-no-files-found: error
