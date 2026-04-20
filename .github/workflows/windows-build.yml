@@ -48,6 +48,7 @@ jobs:
             -DWITH_XC_NETWORKING=ON `
             -DWITH_XC_UPDATECHECK=OFF `
             -DWITH_XC_DOCS=OFF `
+            -DWINSDK=WindowsApp.lib `
             -DWITH_TESTS=ON `
             -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/install"
 
