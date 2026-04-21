@@ -13,13 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - arch: arm64
-            triplet: arm64-osx-dynamic
-            runner: macos-14
-          - arch: x64
-            triplet: x64-osx-dynamic
-            runner: macos-13
+        # x64 on macos-13 is opt-in via workflow_dispatch because the Intel
+        # runner queue is often long and Apple Silicon covers most users.
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '[{"arch":"arm64","triplet":"arm64-osx-dynamic","runner":"macos-14"},{"arch":"x64","triplet":"x64-osx-dynamic","runner":"macos-13"}]' || '[{"arch":"arm64","triplet":"arm64-osx-dynamic","runner":"macos-14"}]') }}
 
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
