@@ -9,15 +9,17 @@ on:
 jobs:
   build:
     name: Build KeePassXC for macOS
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: arm64
             triplet: arm64-osx-dynamic
+            runner: macos-14
           - arch: x64
             triplet: x64-osx-dynamic
+            runner: macos-13
 
     env:
       VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
